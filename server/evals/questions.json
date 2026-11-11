@@ -1,0 +1,16 @@
+{
+  "repoId": "gothinkster-angular-realworld-example-app",
+  "questions": [
+    { "q": "How does authentication work?", "answerable": true, "expectedFiles": ["user.service.ts", "jwt.service.ts", "token.interceptor.ts"] },
+    { "q": "Which interceptor adds the Authorization header to requests?", "answerable": true, "expectedFiles": ["token.interceptor.ts"] },
+    { "q": "Where is the JWT token stored in the browser?", "answerable": true, "expectedFiles": ["jwt.service.ts"] },
+    { "q": "How are 401 errors handled?", "answerable": true, "expectedFiles": ["error.interceptor.ts"] },
+    { "q": "Where are the routes defined and how are protected pages guarded?", "answerable": true, "expectedFiles": ["app.routes.ts"] },
+    { "q": "Where are the application providers and HTTP interceptors registered?", "answerable": true, "expectedFiles": ["app.config.ts"] },
+    { "q": "How does the app restore the logged-in user on startup?", "answerable": true, "expectedFiles": ["user.service.ts", "app.config.ts"] },
+    { "q": "What features does the application have?", "answerable": true, "expectedFiles": ["README.md"] },
+    { "q": "How does payment refund work?", "answerable": false },
+    { "q": "Where is the Stripe checkout integration?", "answerable": false },
+    { "q": "How does the GraphQL server resolve queries?", "answerable": false }
+  ]
+}

@@ -1,0 +1,156 @@
+{
+  "date": "2026-11-11T08:39:27.815Z",
+  "repoId": "gothinkster-angular-realworld-example-app",
+  "k": 5,
+  "retrieval": [
+    {
+      "mode": "bm25",
+      "hit@1": "50%",
+      "hit@5": "75%"
+    },
+    {
+      "mode": "vector",
+      "hit@1": "50%",
+      "hit@5": "100%"
+    },
+    {
+      "mode": "hybrid",
+      "hit@1": "63%",
+      "hit@5": "88%"
+    }
+  ],
+  "answers": [
+    {
+      "question": "How does authentication work?",
+      "answerable": true,
+      "pass": true,
+      "notFound": false,
+      "citations": 8,
+      "invalidCitations": 0,
+      "citesExpectedFile": true,
+      "steps": 4,
+      "tokens": 23218,
+      "seconds": 9.9
+    },
+    {
+      "question": "Which interceptor adds the Authorization header to requests?",
+      "answerable": true,
+      "pass": true,
+      "notFound": false,
+      "citations": 2,
+      "invalidCitations": 0,
+      "citesExpectedFile": true,
+      "steps": 2,
+      "tokens": 7010,
+      "seconds": 3.5
+    },
+    {
+      "question": "Where is the JWT token stored in the browser?",
+      "answerable": true,
+      "pass": true,
+      "notFound": false,
+      "citations": 2,
+      "invalidCitations": 0,
+      "citesExpectedFile": true,
+      "steps": 2,
+      "tokens": 7876,
+      "seconds": 5.1
+    },
+    {
+      "question": "How are 401 errors handled?",
+      "answerable": true,
+      "pass": true,
+      "notFound": false,
+      "citations": 8,
+      "invalidCitations": 0,
+      "citesExpectedFile": true,
+      "steps": 3,
+      "tokens": 19409,
+      "seconds": 8.2
+    },
+    {
+      "question": "Where are the routes defined and how are protected pages guarded?",
+      "answerable": true,
+      "pass": true,
+      "notFound": false,
+      "citations": 7,
+      "invalidCitations": 0,
+      "citesExpectedFile": true,
+      "steps": 3,
+      "tokens": 13702,
+      "seconds": 7.9
+    },
+    {
+      "question": "Where are the application providers and HTTP interceptors registered?",
+      "answerable": true,
+      "pass": true,
+      "notFound": false,
+      "citations": 4,
+      "invalidCitations": 0,
+      "citesExpectedFile": true,
+      "steps": 2,
+      "tokens": 9118,
+      "seconds": 6.9
+    },
+    {
+      "question": "How does the app restore the logged-in user on startup?",
+      "answerable": true,
+      "pass": true,
+      "notFound": false,
+      "citations": 8,
+      "invalidCitations": 0,
+      "citesExpectedFile": true,
+      "steps": 3,
+      "tokens": 18197,
+      "seconds": 9.7
+    },
+    {
+      "question": "What features does the application have?",
+      "answerable": true,
+      "pass": true,
+      "notFound": false,
+      "citations": 4,
+      "invalidCitations": 0,
+      "citesExpectedFile": true,
+      "steps": 2,
+      "tokens": 6323,
+      "seconds": 5.9
+    },
+    {
+      "question": "How does payment refund work?",
+      "answerable": false,
+      "pass": true,
+      "notFound": true,
+      "citations": 0,
+      "invalidCitations": 0,
+      "citesExpectedFile": null,
+      "steps": 3,
+      "tokens": 15483,
+      "seconds": 4.9
+    },
+    {
+      "question": "Where is the Stripe checkout integration?",
+      "answerable": false,
+      "pass": true,
+      "notFound": true,
+      "citations": 0,
+      "invalidCitations": 0,
+      "citesExpectedFile": null,
+      "steps": 3,
+      "tokens": 16719,
+      "seconds": 4.9
+    },
+    {
+      "question": "How does the GraphQL server resolve queries?",
+      "answerable": false,
+      "pass": true,
+      "notFound": true,
+      "citations": 0,
+      "invalidCitations": 0,
+      "citesExpectedFile": null,
+      "steps": 3,
+      "tokens": 17077,
+      "seconds": 5.9
+    }
+  ]
+}
