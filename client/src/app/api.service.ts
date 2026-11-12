@@ -1,7 +1,10 @@
 import { Injectable } from '@angular/core';
 
-export const API_URL = 'http://localhost:3000/api';
+const LOCAL_API_URL = 'http://localhost:3000/api';
 const PRODUCTION_API_URL = 'https://citecode.onrender.com/api';
+
+export const API_URL =
+  typeof location !== 'undefined' && location.hostname === 'localhost' ? LOCAL_API_URL : PRODUCTION_API_URL;
 
 export interface RepoInfo { repoId: string; files: number; chunks: number; }
 export interface IngestResult { repoId: string; files: number; chunks: number; truncated: boolean; ms: number; }
