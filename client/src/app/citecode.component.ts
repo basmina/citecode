@@ -157,7 +157,7 @@ export class CiteCodeComponent implements OnInit {
             patch((m) => ({ ...m, text: m.text + t, status: '' }));
             this.scrollSoon();
           },
-          onReset: () => patch((m) => ({ ...m, text: '' })), // drop preamble text from a step that used tools
+          onReset: () => patch((m) => ({ ...m, text: '' })),
           onDone: (stats, citations) => patch((m) => ({ ...m, stats, citations, status: '', done: true })),
           onError: (msg) => patch((m) => ({ ...m, error: msg, status: '', done: true })),
         },
@@ -258,7 +258,6 @@ export class CiteCodeComponent implements OnInit {
       this.copiedIdx.set(i);
       setTimeout(() => this.copiedIdx.set(-1), 1500);
     } catch {
-      /* clipboard blocked by the browser: nothing to do */
     }
   }
 

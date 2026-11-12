@@ -1,5 +1,5 @@
 {
-  "date": "2026-11-11T11:09:47.664Z",
+  "date": "2026-11-12T08:25:31.699Z",
   "repoId": "gothinkster-angular-realworld-example-app",
   "k": 5,
   "retrieval": [
@@ -25,15 +25,15 @@
       "answerable": true,
       "pass": true,
       "notFound": false,
-      "citations": 8,
+      "citations": 7,
       "invalidCitations": 0,
       "strippedCitations": 0,
       "citesExpectedFile": true,
-      "steps": 2,
-      "tokens": 8206,
-      "cachedPct": 15,
-      "billedInput": 7839,
-      "seconds": 8.1
+      "steps": 4,
+      "tokens": 23285,
+      "cachedPct": 58,
+      "billedInput": 13043,
+      "seconds": 10.5
     },
     {
       "question": "Which interceptor adds the Authorization header to requests?",
@@ -45,25 +45,25 @@
       "strippedCitations": 0,
       "citesExpectedFile": true,
       "steps": 2,
-      "tokens": 5516,
-      "cachedPct": 42,
-      "billedInput": 4036,
-      "seconds": 3.7
+      "tokens": 6184,
+      "cachedPct": 38,
+      "billedInput": 4707,
+      "seconds": 4.3
     },
     {
       "question": "Where is the JWT token stored in the browser?",
       "answerable": true,
       "pass": true,
       "notFound": false,
-      "citations": 2,
+      "citations": 4,
       "invalidCitations": 0,
       "strippedCitations": 0,
       "citesExpectedFile": true,
       "steps": 2,
-      "tokens": 6961,
-      "cachedPct": 33,
-      "billedInput": 5617,
-      "seconds": 4.7
+      "tokens": 7413,
+      "cachedPct": 31,
+      "billedInput": 6149,
+      "seconds": 5.9
     },
     {
       "question": "How are 401 errors handled?",
@@ -75,25 +75,25 @@
       "strippedCitations": 0,
       "citesExpectedFile": true,
       "steps": 2,
-      "tokens": 7116,
+      "tokens": 6984,
       "cachedPct": 34,
-      "billedInput": 5366,
-      "seconds": 6.8
+      "billedInput": 5360,
+      "seconds": 6.1
     },
     {
       "question": "Where are the routes defined and how are protected pages guarded?",
       "answerable": true,
       "pass": true,
       "notFound": false,
-      "citations": 4,
+      "citations": 9,
       "invalidCitations": 0,
       "strippedCitations": 0,
       "citesExpectedFile": true,
-      "steps": 2,
-      "tokens": 6644,
-      "cachedPct": 38,
-      "billedInput": 4620,
-      "seconds": 7.3
+      "steps": 3,
+      "tokens": 13046,
+      "cachedPct": 60,
+      "billedInput": 6776,
+      "seconds": 9.7
     },
     {
       "question": "Where are the application providers and HTTP interceptors registered?",
@@ -105,25 +105,25 @@
       "strippedCitations": 0,
       "citesExpectedFile": true,
       "steps": 2,
-      "tokens": 6035,
-      "cachedPct": 38,
-      "billedInput": 4571,
-      "seconds": 4.7
+      "tokens": 6305,
+      "cachedPct": 40,
+      "billedInput": 4287,
+      "seconds": 7.3
     },
     {
       "question": "How does the app restore the logged-in user on startup?",
       "answerable": true,
       "pass": true,
       "notFound": false,
-      "citations": 4,
+      "citations": 8,
       "invalidCitations": 0,
       "strippedCitations": 0,
       "citesExpectedFile": true,
-      "steps": 2,
-      "tokens": 8407,
-      "cachedPct": 29,
-      "billedInput": 6782,
-      "seconds": 7.4
+      "steps": 4,
+      "tokens": 20161,
+      "cachedPct": 69,
+      "billedInput": 8860,
+      "seconds": 11.8
     },
     {
       "question": "What features does the application have?",
@@ -135,10 +135,10 @@
       "strippedCitations": 0,
       "citesExpectedFile": true,
       "steps": 2,
-      "tokens": 6362,
+      "tokens": 6190,
       "cachedPct": 38,
-      "billedInput": 4575,
-      "seconds": 5.8
+      "billedInput": 4568,
+      "seconds": 5.6
     },
     {
       "question": "How does payment refund work?",
@@ -150,10 +150,10 @@
       "strippedCitations": 0,
       "citesExpectedFile": null,
       "steps": 2,
-      "tokens": 6305,
+      "tokens": 6303,
       "cachedPct": 35,
       "billedInput": 5175,
-      "seconds": 2.8
+      "seconds": 3.2
     },
     {
       "question": "Where is the Stripe checkout integration?",
@@ -164,11 +164,11 @@
       "invalidCitations": 0,
       "strippedCitations": 0,
       "citesExpectedFile": null,
-      "steps": 3,
-      "tokens": 13946,
-      "cachedPct": 51,
-      "billedInput": 8971,
-      "seconds": 4.9
+      "steps": 2,
+      "tokens": 6397,
+      "cachedPct": 36,
+      "billedInput": 5133,
+      "seconds": 3.5
     },
     {
       "question": "How does the GraphQL server resolve queries?",
@@ -177,13 +177,13 @@
       "notFound": true,
       "citations": 0,
       "invalidCitations": 0,
-      "strippedCitations": 0,
+      "strippedCitations": 1,
       "citesExpectedFile": null,
       "steps": 3,
-      "tokens": 15757,
-      "cachedPct": 50,
-      "billedInput": 10260,
-      "seconds": 7.2
+      "tokens": 15798,
+      "cachedPct": 53,
+      "billedInput": 9903,
+      "seconds": 6
     }
   ]
 }

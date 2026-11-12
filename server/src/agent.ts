@@ -213,8 +213,6 @@ export async function ask(
         .map((b) => b.text)
         .join("\n");
 
-      // A "Not found" answer must not cite anything. The prompt asks for that, and the code enforces it.
-      // We count what the model cited anyway, so the eval can show how often the prompt alone failed.
       const refused = isNotFoundAnswer(rawAnswer);
       const verified = await verifyCitations(repoId, rawAnswer);
       const answer = refused ? stripCitations(rawAnswer) : rawAnswer;

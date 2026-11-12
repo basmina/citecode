@@ -1,4 +1,3 @@
-# Debian slim, not Alpine: onnxruntime (local embeddings) needs glibc.
 FROM node:22-slim
 
 WORKDIR /app
@@ -9,7 +8,6 @@ RUN npm ci --omit=dev
 
 COPY src ./src
 
-# The embedding model downloads on first start into node_modules, so the app user must own it.
 RUN chown -R node:node /app
 USER node
 
