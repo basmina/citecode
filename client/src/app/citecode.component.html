@@ -91,6 +91,7 @@
                   }
                 }
                 @if (m.error) { <div class="err">{{ m.error }}</div> }
+                @if (m.stopped) { <div class="stopped">Interaction stopped by user.</div> }
                 @if (m.stats; as st) {
                   <div class="stats">{{ statsLine(st) }}</div>
                   @if (st.toolCalls.length) {

@@ -282,6 +282,13 @@
      color: #6b7684;
  }
 
+ .stopped {
+     margin-top: 6px;
+     font-size: 13px;
+     font-style: italic;
+     color: #8a6d1d;
+ }
+
  .trace,
  .msg-actions {
      white-space: normal;

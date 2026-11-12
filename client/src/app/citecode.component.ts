@@ -11,6 +11,7 @@ interface Message {
   stats?: AgentStats;
   citations?: VerifiedCitation[];
   error?: string;
+  stopped?: boolean;
 }
 
 interface Segment {
@@ -129,7 +130,7 @@ export class CiteCodeComponent implements OnInit {
     }
   }
 
-  async send(preset?: string) {
+    async send(preset?: string) {
     const q = (preset ?? this.draft()).trim();
     if (!q || !this.repoId() || this.busy()) return;
 
@@ -143,7 +144,6 @@ export class CiteCodeComponent implements OnInit {
     this.busy.set(true);
     this.abort = new AbortController();
     this.scrollSoon();
-
     const patch = (fn: (m: Message) => Message) =>
       this.messages.update((ms) => [...ms.slice(0, -1), fn(ms[ms.length - 1])]);
 
@@ -157,7 +157,7 @@ export class CiteCodeComponent implements OnInit {
             patch((m) => ({ ...m, text: m.text + t, status: '' }));
             this.scrollSoon();
           },
-          onReset: () => patch((m) => ({ ...m, text: '' })),
+          onReset: () => patch((m) => ({ ...m, text: '' })), // drop preamble text from a step that used tools
           onDone: (stats, citations) => patch((m) => ({ ...m, stats, citations, status: '', done: true })),
           onError: (msg) => patch((m) => ({ ...m, error: msg, status: '', done: true })),
         },
@@ -169,6 +169,7 @@ export class CiteCodeComponent implements OnInit {
         ...m,
         status: '',
         done: true,
+        stopped: aborted,
         error: aborted ? undefined : e instanceof Error ? e.message : 'Request failed.',
       }));
     } finally {
