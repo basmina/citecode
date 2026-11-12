@@ -1,19 +1,15 @@
-import "dotenv/config";
 import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
-import { hybridSearch } from "./hybrid.js";
-import { buildBm25, hasBm25 } from "./bm25.js";
-import { loadChunks, listFiles, getFileLines } from "./store.js";
-import { logger } from "./logger.js";
-import { verifyCitations, type VerifiedCitation } from "./verify.js";
-import {isNotFoundAnswer, stripCitations} from "./refusal.js";
+import type { Config } from "./config.js";
+import type { HybridSearch } from "./hybrid.js";
+import type { Bm25Index } from "./bm25.js";
+import type { Store } from "./store.js";
+import type { Logger } from "./logger.js";
+import { createCitationVerifier, type VerifiedCitation } from "./verify.js";
+import { isNotFoundAnswer, stripCitations } from "./refusal.js";
 
-const MODEL = process.env.LLM_MODEL ?? "claude-haiku-5-5";
-const MAX_STEPS = Number(process.env.MAX_AGENT_STEPS ?? 6);
 const MAX_QUESTION_CHARS = 1000;
 const MAX_TOOL_CHARS = 12_000;
-
-const client = new Anthropic();
 
 export const SYSTEM_PROMPT = `You are CiteCode, an assistant that answers questions about one indexed code repository.
 
@@ -111,18 +107,33 @@ function withCacheBreakpoint(messages: Anthropic.MessageParam[]): Anthropic.Mess
   return copy;
 }
 
-function describeTool(name: string, input: any): string {
-  if (name === "search_code") return `Searching code for "${String(input?.query ?? "").slice(0, 80)}"`;
-  if (name === "read_file") return `Reading ${String(input?.path ?? "").split("/").pop()}`;
+function describeTool(name: string, input: unknown): string {
+  const args = (input ?? {}) as { query?: unknown; path?: unknown };
+  if (name === "search_code") return `Searching code for "${String(args.query ?? "").slice(0, 80)}"`;
+  if (name === "read_file") return `Reading ${String(args.path ?? "").split("/").pop()}`;
   if (name === "list_files") return "Listing files";
   return `Running ${name}`;
 }
 
-async function ensureIndex(repoId: string) {
-  if (!hasBm25(repoId)) buildBm25(repoId, await loadChunks(repoId));
+export interface AgentDeps {
+  client: Pick<Anthropic, "messages">;
+  config: Pick<Config, "llmModel" | "maxAgentSteps">;
+  logger: Pick<Logger, "info" | "warn" | "error">;
+  store: Pick<Store, "loadChunks" | "listFiles" | "getFileLines">;
+  bm25: Pick<Bm25Index, "has" | "build">;
+  hybridSearch: HybridSearch;
+}
+
+interface AgentContext extends AgentDeps {
+  verifyCitations: ReturnType<typeof createCitationVerifier>;
+}
+
+async function ensureIndex({ bm25, store }: AgentContext, repoId: string) {
+  if (!bm25.has(repoId)) bm25.build(repoId, await store.loadChunks(repoId));
 }
 
 async function runTool(
+  { hybridSearch, store }: AgentContext,
   repoId: string,
   name: string,
   input: unknown,
@@ -148,13 +159,13 @@ async function runTool(
     }
     case "read_file": {
       const { path, start_line, end_line } = readArgs.parse(input);
-      const file = await getFileLines(repoId, path, start_line, end_line);
+      const file = await store.getFileLines(repoId, path, start_line, end_line);
       if (!file) return "File not found. Use list_files to see valid paths.";
       return clip(`${path} lines ${file.from}-${file.to} of ${file.total}\n${file.lines.join("\n")}`);
     }
     case "list_files": {
       const { prefix } = listArgs.parse(input);
-      const all = (await listFiles(repoId)).filter((f) => !prefix || f.startsWith(prefix));
+      const all = (await store.listFiles(repoId)).filter((f) => !prefix || f.startsWith(prefix));
       const shown = all.slice(0, 200);
       return shown.join("\n") + (all.length > shown.length ? `\n...(${all.length - shown.length} more not shown)` : "");
     }
@@ -163,7 +174,8 @@ async function runTool(
   }
 }
 
-export async function ask(
+async function ask(
+  ctx: AgentContext,
   repoId: string,
   question: string,
   hooks: AgentHooks = {}
@@ -172,7 +184,8 @@ export async function ask(
   if (!q) throw new Error("Question is empty.");
   if (q.length > MAX_QUESTION_CHARS) throw new Error(`Question is too long (max ${MAX_QUESTION_CHARS} characters).`);
 
-  await ensureIndex(repoId);
+  const { client, config, logger, verifyCitations } = ctx;
+  await ensureIndex(ctx, repoId);
 
   const started = Date.now();
   const stats: AgentStats = {
@@ -188,12 +201,12 @@ export async function ask(
   const messages: Anthropic.MessageParam[] = [{ role: "user", content: q }];
   const seen = new Set<number>();
 
-  for (let step = 1; step <= MAX_STEPS; step++) {
+  for (let step = 1; step <= config.maxAgentSteps; step++) {
     if (hooks.signal?.aborted) throw new Error("Request aborted by client.");
     stats.steps = step;
 
     const stream = client.messages.stream({
-      model: MODEL,
+      model: config.llmModel,
       max_tokens: 1200,
       system: [{ type: "text", text: SYSTEM_PROMPT, cache_control: EPHEMERAL }],
       tools,
@@ -207,7 +220,7 @@ export async function ask(
     stats.cacheReadTokens += response.usage.cache_read_input_tokens ?? 0;
     stats.cacheCreationTokens += response.usage.cache_creation_input_tokens ?? 0;
 
-        if (response.stop_reason !== "tool_use") {
+    if (response.stop_reason !== "tool_use") {
       const rawAnswer = response.content
         .filter((b): b is Anthropic.TextBlock => b.type === "text")
         .map((b) => b.text)
@@ -246,7 +259,7 @@ export async function ask(
         results.push({
           type: "tool_result",
           tool_use_id: block.id,
-          content: await runTool(repoId, block.name, block.input, stats, seen),
+          content: await runTool(ctx, repoId, block.name, block.input, stats, seen),
         });
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
@@ -260,3 +273,12 @@ export async function ask(
   logger.warn({ repoId, ...stats }, "step limit reached");
     return { answer: "I could not reach an answer within the step limit. Try a more specific question.", stats, citations: [], refusalCitationsStripped: 0 };
 }
+
+export function createAgent(deps: AgentDeps) {
+  const ctx: AgentContext = { ...deps, verifyCitations: createCitationVerifier(deps) };
+  return {
+    ask: (repoId: string, question: string, hooks: AgentHooks = {}) => ask(ctx, repoId, question, hooks),
+  };
+}
+
+export type Agent = ReturnType<typeof createAgent>;

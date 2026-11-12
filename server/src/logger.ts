@@ -1,3 +1,6 @@
 import pino from "pino";
+import type { Config } from "./config.js";
 
-export const logger = pino({ level: process.env.LOG_LEVEL ?? "info" });
+export type Logger = pino.Logger;
+
+export const createLogger = (level: Config["logLevel"]): Logger => pino({ level });

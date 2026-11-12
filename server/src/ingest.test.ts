@@ -1,11 +1,14 @@
 import { describe, it, expect, vi } from "vitest";
 import { zipSync, strToU8 } from "fflate";
+import { extractFiles, createIngestor, IngestError } from "./ingest.js";
 
-vi.mock("./embeddings.js", () => ({ embed: vi.fn() }));
-vi.mock("./store.js", () => ({ replaceRepoChunks: vi.fn(), loadChunks: vi.fn() }));
-vi.mock("./logger.js", () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
-
-import { extractFiles, ingestFromGithub, ingestFromZip, IngestError } from "./ingest.js";
+const ingestor = createIngestor({
+  embedder: { embed: vi.fn() },
+  store: { replaceRepoChunks: vi.fn(), loadChunks: vi.fn() },
+  bm25: { build: vi.fn() },
+  logger: { info: vi.fn() },
+  config: { maxRepoFiles: 1500, maxChunks: 3000 },
+});
 
 const zipOf = (files: Record<string, string>) =>
   zipSync(Object.fromEntries(Object.entries(files).map(([name, text]) => [name, strToU8(text)])));
@@ -42,17 +45,54 @@ describe("extractFiles", () => {
 
 describe("ingest input validation", () => {
   it("rejects uploads that are not ZIP archives", async () => {
-    await expect(ingestFromZip("x.zip", new Uint8Array([1, 2, 3, 4, 5]))).rejects.toThrow("not a ZIP");
+    await expect(ingestor.ingestFromZip("x.zip", new Uint8Array([1, 2, 3, 4, 5]))).rejects.toThrow("not a ZIP");
   });
 
   it("rejects non-GitHub URLs before making any network call", async () => {
     const spy = vi.spyOn(globalThis, "fetch");
-    await expect(ingestFromGithub("https://example.com/a/b")).rejects.toThrow("GitHub repository URL");
+    await expect(ingestor.ingestFromGithub("https://example.com/a/b")).rejects.toThrow("GitHub repository URL");
     expect(spy).not.toHaveBeenCalled();
     spy.mockRestore();
   });
 
   it("rejects dot-only owner or repo names", async () => {
-    await expect(ingestFromGithub("https://github.com/../x")).rejects.toThrow(IngestError);
+    await expect(ingestor.ingestFromGithub("https://github.com/../x")).rejects.toThrow(IngestError);
+  });
+});
+
+describe("ingest", () => {
+  it("indexes a ZIP through the injected embedder, store and BM25 index", async () => {
+    const embed = vi.fn().mockResolvedValue([[0.1, 0.2]]);
+    const replaceRepoChunks = vi.fn();
+    const build = vi.fn();
+    const local = createIngestor({
+      embedder: { embed },
+      store: { replaceRepoChunks, loadChunks: vi.fn().mockResolvedValue([]) },
+      bm25: { build },
+      logger: { info: vi.fn() },
+      config: { maxRepoFiles: 1500, maxChunks: 3000 },
+    });
+
+    const result = await local.ingestFromZip("My Repo.zip", zipOf({ "src/a.ts": "export const a = 1;" }));
+
+    expect(result).toMatchObject({ files: 1, chunks: 1, truncated: false });
+    expect(result.repoId).toMatch(/^my-repo-[0-9a-f]{6}$/);
+    expect(replaceRepoChunks).toHaveBeenCalledTimes(1);
+    expect(build).toHaveBeenCalledWith(result.repoId, []);
+  });
+
+  it("truncates to the configured chunk limit", async () => {
+    const embed = vi.fn().mockImplementation(async (texts: string[]) => texts.map(() => [0]));
+    const local = createIngestor({
+      embedder: { embed },
+      store: { replaceRepoChunks: vi.fn(), loadChunks: vi.fn().mockResolvedValue([]) },
+      bm25: { build: vi.fn() },
+      logger: { info: vi.fn() },
+      config: { maxRepoFiles: 1500, maxChunks: 1 },
+    });
+
+    const result = await local.ingestFromZip("x.zip", zipOf({ "a.ts": "export {}", "b.ts": "export {}" }));
+
+    expect(result).toMatchObject({ chunks: 1, truncated: true });
   });
 });

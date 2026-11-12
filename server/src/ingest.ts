@@ -1,16 +1,15 @@
 import { unzipSync } from "fflate";
 import { createHash } from "node:crypto";
 import { chunkFile } from "./chunker.js";
-import { embed } from "./embeddings.js";
-import { replaceRepoChunks, loadChunks } from "./store.js";
-import { buildBm25 } from "./bm25.js";
+import type { Embedder } from "./embeddings.js";
+import type { Store } from "./store.js";
+import type { Bm25Index } from "./bm25.js";
+import type { Config } from "./config.js";
+import type { Logger } from "./logger.js";
 import { shouldIndex, isSkippedPath, type SourceFile } from "./files.js";
-import { logger } from "./logger.js";
 
 const MAX_ZIP_BYTES = 25 * 1024 * 1024;
 const MAX_UNPACKED_BYTES = 80 * 1024 * 1024;
-const MAX_FILES = Number(process.env.MAX_REPO_FILES ?? 1500);
-const MAX_CHUNKS = Number(process.env.MAX_CHUNKS ?? 3000);
 
 export class IngestError extends Error {
   constructor(message: string, public status = 400) {
@@ -26,7 +25,17 @@ export interface IngestResult {
   ms: number;
 }
 
-const inFlight = new Set<string>();
+export interface IngestorDeps {
+  embedder: Pick<Embedder, "embed">;
+  store: Pick<Store, "replaceRepoChunks" | "loadChunks">;
+  bm25: Pick<Bm25Index, "build">;
+  logger: Pick<Logger, "info">;
+  config: Pick<Config, "maxRepoFiles" | "maxChunks" | "githubToken">;
+}
+
+interface IngestContext extends IngestorDeps {
+  inFlight: Set<string>;
+}
 
 const isSafePath = (name: string) =>
   !name.startsWith("/") && !name.includes("\\") && !name.split("/").includes("..");
@@ -62,28 +71,29 @@ export function extractFiles(zip: Uint8Array): SourceFile[] {
   return files;
 }
 
-async function runIngest(repoId: string, zip: Uint8Array): Promise<IngestResult> {
+async function runIngest(ctx: IngestContext, repoId: string, zip: Uint8Array): Promise<IngestResult> {
+  const { embedder, store, bm25, logger, config, inFlight } = ctx;
   if (inFlight.has(repoId)) throw new IngestError("This repository is already being indexed. Please wait.", 409);
   inFlight.add(repoId);
   const started = Date.now();
   try {
     let files = extractFiles(zip);
     let truncated = false;
-    if (files.length > MAX_FILES) {
-      files = files.slice(0, MAX_FILES);
+    if (files.length > config.maxRepoFiles) {
+      files = files.slice(0, config.maxRepoFiles);
       truncated = true;
     }
 
     let chunks = files.flatMap((f) => chunkFile(f.path, f.text));
     if (chunks.length === 0) throw new IngestError("No supported source files were found in this repository.");
-    if (chunks.length > MAX_CHUNKS) {
-      chunks = chunks.slice(0, MAX_CHUNKS);
+    if (chunks.length > config.maxChunks) {
+      chunks = chunks.slice(0, config.maxChunks);
       truncated = true;
     }
 
-    const embeddings = await embed(chunks.map((c) => c.content));
-    await replaceRepoChunks(repoId, chunks, embeddings);
-    buildBm25(repoId, await loadChunks(repoId));
+    const embeddings = await embedder.embed(chunks.map((c) => c.content));
+    await store.replaceRepoChunks(repoId, chunks, embeddings);
+    bm25.build(repoId, await store.loadChunks(repoId));
 
     const result = { repoId, files: files.length, chunks: chunks.length, truncated, ms: Date.now() - started };
     logger.info(result, "repository indexed");
@@ -93,14 +103,14 @@ async function runIngest(repoId: string, zip: Uint8Array): Promise<IngestResult>
   }
 }
 
-export async function ingestFromZip(originalName: string, bytes: Uint8Array): Promise<IngestResult> {
+async function ingestFromZip(ctx: IngestContext, originalName: string, bytes: Uint8Array): Promise<IngestResult> {
   if (bytes.length < 4 || bytes[0] !== 0x50 || bytes[1] !== 0x4b) {
     throw new IngestError("That file is not a ZIP archive.");
   }
   const base =
     originalName.replace(/\.zip$/i, "").toLowerCase().replace(/[^a-z0-9._-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 40) || "upload";
   const hash = createHash("sha256").update(bytes).digest("hex").slice(0, 6);
-  return runIngest(`${base}-${hash}`, bytes);
+  return runIngest(ctx, `${base}-${hash}`, bytes);
 }
 
 const GITHUB_URL = /^https:\/\/github\.com\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+?)(?:\.git)?\/?$/;
@@ -132,7 +142,7 @@ async function readLimited(res: Response, limit: number): Promise<Uint8Array> {
   return out;
 }
 
-export async function ingestFromGithub(url: string): Promise<IngestResult> {
+async function ingestFromGithub(ctx: IngestContext, url: string): Promise<IngestResult> {
   const m = GITHUB_URL.exec(url.trim());
   if (!m) throw new IngestError("Enter a GitHub repository URL like https://github.com/owner/repo");
   const [, owner, repo] = m;
@@ -140,7 +150,7 @@ export async function ingestFromGithub(url: string): Promise<IngestResult> {
     throw new IngestError("Enter a GitHub repository URL like https://github.com/owner/repo");
   }
   const headers: Record<string, string> = { "User-Agent": "citecode", Accept: "application/vnd.github+json" };
-  if (process.env.GITHUB_TOKEN) headers.Authorization = `Bearer ${process.env.GITHUB_TOKEN}`;
+  if (ctx.config.githubToken) headers.Authorization = `Bearer ${ctx.config.githubToken}`;
 
   let res: Response;
   try {
@@ -158,5 +168,15 @@ export async function ingestFromGithub(url: string): Promise<IngestResult> {
   if (!res.ok) throw new IngestError(`GitHub returned an error (${res.status}).`, 502);
 
   const zip = await readLimited(res, MAX_ZIP_BYTES);
-  return runIngest(`${owner}-${repo}`.toLowerCase(), zip);
+  return runIngest(ctx, `${owner}-${repo}`.toLowerCase(), zip);
 }
+
+export function createIngestor(deps: IngestorDeps) {
+  const ctx: IngestContext = { ...deps, inFlight: new Set<string>() };
+  return {
+    ingestFromZip: (originalName: string, bytes: Uint8Array) => ingestFromZip(ctx, originalName, bytes),
+    ingestFromGithub: (url: string) => ingestFromGithub(ctx, url),
+  };
+}
+
+export type Ingestor = ReturnType<typeof createIngestor>;

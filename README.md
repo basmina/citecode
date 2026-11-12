@@ -183,6 +183,8 @@ server/schema.sql      Database table (run once)
 server/Dockerfile      API image
 server/src/
   server.ts            Express API, SSE streaming, rate limiting
+  config.ts            All settings, read and validated once at startup
+  services.ts          Builds the pool, store, embedder, agent and ingestor and wires them together
   agent.ts             Agent loop, tools, system prompt, prompt caching
   hybrid.ts, rrf.ts    Hybrid retrieval and Reciprocal Rank Fusion
   bm25.ts              In-memory BM25 (minisearch, camelCase-aware tokenizer)
@@ -276,7 +278,7 @@ I wrote 11 questions for a pinned public repo (`gothinkster/angular-realworld-ex
 
 Hybrid puts the right file first most often, but vector alone found the right file within the top 5 every time. With only 8 questions, one question moves a number by 12 points, so I would not claim hybrid "wins". I kept it because BM25 rescues identifier-style questions that vector search ranks low.
 
-**Answer results across my five runs:**
+**Answer results across my six runs:**
 
 | Run | Answerable passed | Refused correctly | Valid citations |
 |---|---|---|---|
@@ -284,11 +286,12 @@ Hybrid puts the right file first most often, but vector alone found the right fi
 | 2. After tightening prompt + verifier | 8/8 | 3/3 | 43/43 |
 | 3. After the caching changes | 8/8 | 2/3 | 44/44 |
 | 4. After enforcing "Not found" in code | 8/8 | 3/3 | 34/34 |
-| 5. Final run, same code as run 4 | 8/8 | 3/3 | 44/44 |
+| 5. Same code as run 4 | 8/8 | 3/3 | 44/44 |
+| 6. After the config and dependency-injection refactor | 8/8 | 3/3 | 46/46 |
 
 Run 1 showed two real problems: the model sometimes cited line ranges it had never seen, and refusals still attached citations. I fixed these with stricter prompt rules, the server-side verifier and red marking in the UI. Run 3 showed refusals were still not fully reliable: one correct "Not found" still carried a citation. So I moved that rule into code (the server removes citations from any "Not found" answer).
 
-**Important:** refusal behaviour varies between runs. In run 3 the model cited in 1 of 3 refusals. In run 4 it refused cleanly all three times, so the code guard had nothing to remove. In run 5 it cited again on the GraphQL question (1 of 3), and this time the server removed that citation, so the guard has now worked in a live eval and not only in its 5 unit tests. The eval keeps a separate count of "refusals where the model cited anyway", so the model's own reliability stays visible. `results.json` holds run 5. The earlier runs are kept as `results-baseline.json` (run 2), `results-run3-10of11.json` and `results-run4.json`.
+**Important:** refusal behaviour varies between runs. In run 3 the model cited in 1 of 3 refusals. In run 4 it refused cleanly all three times, so the code guard had nothing to remove. In run 5 it cited again on the GraphQL question (1 of 3), and in run 6 on the Stripe question. Both times the server removed the citation, so the guard has now worked in live evals and not only in its 5 unit tests. The eval keeps a separate count of "refusals where the model cited anyway", so the model's own reliability stays visible. `results.json` holds run 6. The earlier runs are kept as `results-baseline.json` (run 2), `results-run3-10of11.json` and `results-run4.json`. I did not save a file for run 5, so its numbers come from the console output I copied at the time.
 
 **Honest limits of this eval:**
 
@@ -316,13 +319,13 @@ Run 1 showed two real problems: the model sometimes cited line ranges it had nev
 
 **Result:**
 
-| | Baseline (before) | Run 3 | Run 4 | Run 5 |
+| | Baseline (before) | Run 3 | Run 4 | Run 5 | Run 6 |
 |---|---|---|---|---|
-| Avg tokens per question | ~14,000 | 11,571 | 8,296 | 10,733 |
-| Avg billed input (cache writes 1.25x, reads 0.1x) | not recorded | 6,740 | 6,165 | 6,724 |
-| Avg input that was cached | 0% | 53% | 37% | 45% |
+| Avg tokens per question | ~14,000 | 11,571 | 8,296 | 10,733 | 11,368 |
+| Avg billed input (cache writes 1.25x, reads 0.1x) | not recorded | 6,740 | 6,165 | 6,724 | 7,144 |
+| Avg input that was cached | 0% | 53% | 37% | 45% | 47% |
 
-All three runs after the change are below the baseline. But runs 3, 4 and 5 differ by up to about 30% with nearly identical token code, because the model sometimes finishes in 2 steps and sometimes in 4, and writes longer or shorter answers. The baseline was also a single run. So I can say tokens went down, but not by exactly how much. In run 3 the first question also reused a cache I had warmed by hand minutes earlier, which flattered that row. A fair measurement would need several runs per question and an average with a spread, which I list as a next step.
+All four runs after the change are below the baseline. But runs 3 to 6 differ by up to about 30% with nearly identical token code, because the model sometimes finishes in 2 steps and sometimes in 4, and writes longer or shorter answers. The baseline was also a single run. So I can say tokens went down, but not by exactly how much. In run 3 the first question also reused a cache I had warmed by hand minutes earlier, which flattered that row. A fair measurement would need several runs per question and an average with a spread, which I list as a next step.
 
 **What I did not do:** I did not tune further (for example 5 chunks per search, or batching searches). Changing several things at once would not show which one helped. Each is a separate experiment for later.
 
@@ -371,7 +374,7 @@ That decided my approach:
 These are the ones that shaped the rest of the app. The smaller choices (chunk size, embeddings, vector database) are in section 5.1.
 
 1. **Check every citation on the server.** *Alternative:* trust the prompt rule. My first strict eval run showed the model inventing line ranges, and a prompt rule alone did not stop it. So the server checks each citation and the UI marks the ones it cannot verify. *Trade-off:* it checks that the lines exist, not that they prove the claim.
-2. **"Not found" instead of guessing, enforced in code.** *Alternative:* always give a best-effort answer, or rely only on the prompt. A confident wrong answer is the worst result for a tool people use to learn a codebase. The prompt asks for a clean refusal, and when the model still added a citation (1 of 3 refusals, in two different runs) I made the server remove it. *Trade-off:* a refusal can still be wrong. This guard only stops it from looking more certain than it is.
+2. **"Not found" instead of guessing, enforced in code.** *Alternative:* always give a best-effort answer, or rely only on the prompt. A confident wrong answer is the worst result for a tool people use to learn a codebase. The prompt asks for a clean refusal, and when the model still added a citation (1 of 3 refusals, in three different runs) I made the server remove it. *Trade-off:* a refusal can still be wrong. This guard only stops it from looking more certain than it is.
 3. **Hybrid retrieval with RRF.** *Alternative:* vector only. Code questions mix exact identifiers with vague meaning, and a small general embedding model is weak on identifiers. *Trade-off:* more parts, and on my small eval the benefit is not proven.
 4. **My own agent loop, no framework.** *Alternative:* LangChain or an agent SDK. The loop is about 100 lines and I wanted to see every step, token and cache number myself. *Trade-off:* I maintain it, and I get no ready-made features.
 5. **Prompt caching and no repeated chunks.** See 5.9. *Trade-off:* a modest gain that pays off most on multi-step questions, and its exact size is uncertain.
@@ -394,9 +397,9 @@ These are the ones that shaped the rest of the app. The smaller choices (chunk s
 | 10 | **A warm cache inflated one eval row.** | The first question showed 100% cached. | I had run the same question minutes earlier. I note it in the results. |
 | 11 | **Indexing is slow.** 75 files took 36.5 s with the local embedding model on CPU. | Index timing in the UI. | Accepted as a trade-off for no extra API key; listed as a limitation. |
 | 12 | **Docker did not run on my machine.** | I had configuration issues, and my Windows 10 did not support the Docker run. | Section 6.3. |
-| 13 | **A refusal still carried a citation** in one eval run (10/11). | The eval's stricter refusal check. | Moved the rule into code: `refusal.ts` removes citations from any "Not found" answer, with unit tests. Run 4 passed 3/3 without needing it. In run 5 the model cited again on one refusal and the server removed the citation, so the guard has worked live. |
+| 13 | **A refusal still carried a citation** in one eval run (10/11). | The eval's stricter refusal check. | Moved the rule into code: `refusal.ts` removes citations from any "Not found" answer, with unit tests. Run 4 passed 3/3 without needing it. In runs 5 and 6 the model cited again on one refusal and the server removed the citation, so the guard has worked live. |
 | 14 | **The repo had no database schema.** The table had been created by hand in Neon, so a fresh clone could not run. | Searched the code for `CREATE TABLE` and found none. | Read the real columns from Neon and wrote `server/schema.sql`. |
-| 15 | **Token cost varied about 30% between runs** with the same token code. | Run 3, 4 and 5 averages. | Stopped claiming an exact saving; report all three runs and note that a fair measurement needs several runs per question. |
+| 15 | **Token cost varied about 30% between runs** with the same token code. | Run 3 to 6 averages. | Stopped claiming an exact saving; report all four runs and note that a fair measurement needs several runs per question. |
 | 16 | **The client had the API address hard-coded to `localhost`**, which would break the deployed site for everyone else. | Preparing the deployment. | The address is now chosen at load time: `localhost` uses the local API, any other host uses the deployed API. |
 | 17 | **The first Render deploy failed within seconds**, before the build started. | The deploy log ended right after the checkout line. | It was the Root Directory: my Dockerfile is in server/, so I set the service's Root Directory to server. |
 | 18 | **The API address showed 404 in the browser.** | Opened the base URL of the API. | Not a fault: the API only has routes under `/api`. I checked `/api/health` and `/api/repos` instead. |
@@ -412,7 +415,7 @@ These are the ones that shaped the rest of the app. The smaller choices (chunk s
 
 **Followed**
 
-- Small modules with one job each; the LLM client, database and embeddings are replaced with mocks in tests.
+- Small modules with one job each. Settings are read once in `config.ts` and validated with zod, so a missing key stops the server at startup with a clear message. The database pool, Anthropic client, embedder and BM25 index are created in `services.ts` and passed into the modules that need them, so tests pass in fakes and nothing is built at import time.
 - TypeScript strict mode, checked in CI (`npm run typecheck`).
 - 42 tests: chunking, RRF, BM25, file filtering, citation parsing, refusal handling, ingestion safety, citation verification and the agent loop.
 - Configuration through environment variables; `.env` git-ignored; secrets set in the Render dashboard and never in the repo.
@@ -515,12 +518,13 @@ I used Claude Code in VS Code for most of this project. In short: Claude wrote t
 - Line-window chunks can split a long function in two.
 - No call-graph analysis, so "who calls this?" relies on text and semantic search.
 - BM25 lives in memory: one instance only, rebuilt after a restart.
+- Indexing runs inside the API process, so while a large repo is being indexed (about 1,000 chunks takes a few minutes on my laptop) other requests can be slow or time out. Indexing should be a background job; see section 13.
 - The local embedding model is small; quality on unusual code may vary, and indexing on CPU is slow.
 - **On the free Render instance** (0.1 CPU, 512 MB RAM) indexing a new repo may be very slow or fail, and the API sleeps after 15 minutes idle, so the first request takes about a minute. The demo uses a repo indexed beforehand.
 - Without a `GITHUB_TOKEN`, indexing public repos on the deployed site can hit GitHub's anonymous rate limit (60 requests per hour per IP).
 - No authentication or per-user isolation.
 - Citation verification checks that lines exist, not that they prove the claim.
-- Refusals depend on the model: in two of my five runs it added a citation to 1 of 3 refusals. The server now removes citations from any "Not found" answer, and it did so in run 5. A refusal can also be wrong (the answer exists but was not found).
+- Refusals depend on the model: in three of my six runs it added a citation to 1 of 3 refusals. The server now removes citations from any "Not found" answer, and it did so in runs 5 and 6. A refusal can also be wrong (the answer exists but was not found).
 - Prompt-injection defences reduce risk and do not remove it.
 - The eval set is small, partly written after seeing outputs, and tuned against; treat the numbers as a smoke test.
 - Token cost varies about 30% between runs, so the exact saving from caching is uncertain.
@@ -551,5 +555,5 @@ Attached in the Word document.
 ## Appendix
 
 - **A. System prompt:** see `SYSTEM_PROMPT` in `server/src/agent.ts`.
-- **B. Eval questions and saved results:** `server/evals/questions.json`, `server/evals/results.json` (latest run, run 5), `server/evals/results-baseline.json` (run 2) and `server/evals/results-run3-10of11.json` (run 3) and `server/evals/results-run4.json` (run 4).
+- **B. Eval questions and saved results:** `server/evals/questions.json`, `server/evals/results.json` (latest run, run 6), `server/evals/results-baseline.json` (run 2) and `server/evals/results-run3-10of11.json` (run 3) and `server/evals/results-run4.json` (run 4).
 - **C. Database schema:** `server/schema.sql`.

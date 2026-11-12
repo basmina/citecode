@@ -1,10 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const { getFileLines } = vi.hoisted(() => ({ getFileLines: vi.fn() }));
-vi.mock("./store.js", () => ({ getFileLines }));
-vi.mock("./logger.js", () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
+import { createCitationVerifier } from "./verify.js";
 
-import { verifyCitations } from "./verify.js";
+const getFileLines = vi.fn();
+const verifyCitations = createCitationVerifier({
+  store: { getFileLines },
+  logger: { warn: vi.fn() },
+});
 
 beforeEach(() => {
   getFileLines.mockReset();

@@ -1,18 +1,26 @@
-import { pipeline } from "@huggingface/transformers";
+import { pipeline, type FeatureExtractionPipeline } from "@huggingface/transformers";
 
-let extractor: any = null;
+const MODEL_NAME = "Xenova/all-MiniLM-L6-v2";
 
-async function getExtractor() {
-  extractor ??= await pipeline("feature-extraction", "Xenova/all-MiniLM-L6-v2");
-  return extractor;
-}
+export function createEmbedder() {
+  let extractor: Promise<FeatureExtractionPipeline> | undefined;
 
-export async function embed(texts: string[], batchSize = 16): Promise<number[][]> {
-  const ex = await getExtractor();
-  const result: number[][] = [];
-  for (let i = 0; i < texts.length; i += batchSize) {
-    const out = await ex(texts.slice(i, i + batchSize), { pooling: "mean", normalize: true });
-    result.push(...(out.tolist() as number[][]));
+  const getExtractor = () => {
+    extractor ??= pipeline("feature-extraction", MODEL_NAME) as unknown as Promise<FeatureExtractionPipeline>;
+    return extractor;
+  };
+
+  async function embed(texts: string[], batchSize = 16): Promise<number[][]> {
+    const ex = await getExtractor();
+    const result: number[][] = [];
+    for (let i = 0; i < texts.length; i += batchSize) {
+      const out = await ex(texts.slice(i, i + batchSize), { pooling: "mean", normalize: true });
+      result.push(...(out.tolist() as number[][]));
+    }
+    return result;
   }
-  return result;
+
+  return { embed };
 }
+
+export type Embedder = ReturnType<typeof createEmbedder>;

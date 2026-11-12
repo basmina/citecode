@@ -1,12 +1,6 @@
-import "dotenv/config";
-import "./env.js";
 import { readFile, writeFile } from "node:fs/promises";
-import { embed } from "../src/embeddings.js";
-import { loadChunks, vectorSearch } from "../src/store.js";
-import { buildBm25, bm25Search } from "../src/bm25.js";
-import { hybridSearch } from "../src/hybrid.js";
-import { ask } from "../src/agent.js";
-import { pool } from "../src/db.js";
+import { loadConfig } from "../src/config.js";
+import { createServices } from "../src/services.js";
 
 interface EvalQuestion {
   q: string;
@@ -17,12 +11,15 @@ interface EvalQuestion {
 const K = 5;
 const withLlm = !process.argv.includes("--no-llm");
 
+const config = loadConfig({ LOG_LEVEL: "warn", ...process.env });
+const { bm25, store, embedder, hybridSearch, agent, pool } = createServices(config);
+
 const set: { repoId: string; questions: EvalQuestion[] } = JSON.parse(
   await readFile(new URL("./questions.json", import.meta.url), "utf8")
 );
 const { repoId } = set;
 
-buildBm25(repoId, await loadChunks(repoId));
+bm25.build(repoId, await store.loadChunks(repoId));
 
 const modes = ["bm25", "vector", "hybrid"] as const;
 type Mode = (typeof modes)[number];
@@ -37,10 +34,10 @@ const answerable = set.questions.filter((x) => x.answerable && x.expectedFiles?.
 const ranks: Record<Mode, (number | null)[]> = { bm25: [], vector: [], hybrid: [] };
 
 for (const item of answerable) {
-  const [vec] = await embed([item.q]);
+  const [vec] = await embedder.embed([item.q]);
   const files: Record<Mode, string[]> = {
-    bm25: bm25Search(repoId, item.q, 30).map((c) => c.filePath),
-    vector: (await vectorSearch(repoId, vec, 30)).map((c) => c.filePath),
+    bm25: bm25.search(repoId, item.q, 30).map((c) => c.filePath),
+    vector: (await store.vectorSearch(repoId, vec, 30)).map((c) => c.filePath),
     hybrid: (await hybridSearch(repoId, item.q, 30)).map((c) => c.filePath),
   };
   for (const m of modes) ranks[m].push(rankOf(files[m], item.expectedFiles!));
@@ -89,7 +86,7 @@ if (withLlm) {
   console.log("\nRunning answer checks with the LLM (this makes real API calls)...");
   for (const item of set.questions) {
     try {
-      const { answer, stats, citations: cites, refusalCitationsStripped } = await ask(repoId, item.q);
+      const { answer, stats, citations: cites, refusalCitationsStripped } = await agent.ask(repoId, item.q);
       const notFound = /^\s*not found in this repo/i.test(answer);
       const badCites = cites.filter((c) => !c.valid).map((c) => `${c.path}:${c.start}-${c.end}`);
       const invalid = badCites.length;

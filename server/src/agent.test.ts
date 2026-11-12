@@ -1,25 +1,26 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import type Anthropic from "@anthropic-ai/sdk";
+import { createAgent } from "./agent.js";
+import { loadConfig } from "./config.js";
 
-const { streamMock, hybridMock } = vi.hoisted(() => {
-  process.env.MAX_AGENT_STEPS = "3";
-  return { streamMock: vi.fn(), hybridMock: vi.fn() };
-});
+const streamMock = vi.fn();
+const hybridMock = vi.fn();
 
-vi.mock("@anthropic-ai/sdk", () => ({
-  default: class {
-    messages = { stream: streamMock };
+const config = loadConfig({ ANTHROPIC_API_KEY: "test", DATABASE_URL: "test", MAX_AGENT_STEPS: "3" });
+
+const agent = createAgent({
+  client: { messages: { stream: streamMock } } as unknown as Anthropic,
+  config,
+  logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+  store: {
+    loadChunks: vi.fn(),
+    listFiles: vi.fn().mockResolvedValue(["a.ts"]),
+    getFileLines: vi.fn(),
   },
-}));
-vi.mock("./hybrid.js", () => ({ hybridSearch: hybridMock }));
-vi.mock("./bm25.js", () => ({ hasBm25: () => true, buildBm25: vi.fn() }));
-vi.mock("./store.js", () => ({
-  loadChunks: vi.fn(),
-  listFiles: vi.fn().mockResolvedValue(["a.ts"]),
-  getFileLines: vi.fn(),
-}));
-vi.mock("./logger.js", () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
-
-import { ask } from "./agent.js";
+  bm25: { has: () => true, build: vi.fn() },
+  hybridSearch: hybridMock,
+});
+const { ask } = agent;
 
 const turn = (content: unknown[], stop_reason: string) => ({
   on: vi.fn(),

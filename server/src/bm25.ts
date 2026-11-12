@@ -11,29 +11,35 @@ function codeTokenize(text: string): string[] {
   return out;
 }
 
-const indexes = new Map<string, MiniSearch<StoredChunk>>();
-const chunkMaps = new Map<string, Map<number, StoredChunk>>();
+export function createBm25Index() {
+  const indexes = new Map<string, MiniSearch<StoredChunk>>();
+  const chunkMaps = new Map<string, Map<number, StoredChunk>>();
 
-export function buildBm25(repoId: string, chunks: StoredChunk[]) {
-  const ms = new MiniSearch<StoredChunk>({
-    fields: ["content", "filePath"],
-    idField: "id",
-    tokenize: codeTokenize,
-  });
-  ms.addAll(chunks);
-  indexes.set(repoId, ms);
-  chunkMaps.set(repoId, new Map(chunks.map((c) => [c.id, c])));
+  function build(repoId: string, chunks: StoredChunk[]) {
+    const ms = new MiniSearch<StoredChunk>({
+      fields: ["content", "filePath"],
+      idField: "id",
+      tokenize: codeTokenize,
+    });
+    ms.addAll(chunks);
+    indexes.set(repoId, ms);
+    chunkMaps.set(repoId, new Map(chunks.map((c) => [c.id, c])));
+  }
+
+  function search(repoId: string, query: string, limit: number): StoredChunk[] {
+    const ms = indexes.get(repoId);
+    const map = chunkMaps.get(repoId);
+    if (!ms || !map) return [];
+    return ms
+      .search(query, { prefix: true, combineWith: "OR" })
+      .slice(0, limit)
+      .map((r) => map.get(r.id as number)!)
+      .filter(Boolean);
+  }
+
+  const has = (repoId: string) => indexes.has(repoId);
+
+  return { build, search, has };
 }
 
-export function bm25Search(repoId: string, query: string, limit: number): StoredChunk[] {
-  const ms = indexes.get(repoId);
-  const map = chunkMaps.get(repoId);
-  if (!ms || !map) return [];
-  return ms
-    .search(query, { prefix: true, combineWith: "OR" })
-    .slice(0, limit)
-    .map((r) => map.get(r.id as number)!)
-    .filter(Boolean);
-}
-
-export const hasBm25 = (repoId: string) => indexes.has(repoId);
+export type Bm25Index = ReturnType<typeof createBm25Index>;
