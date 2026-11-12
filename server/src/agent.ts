@@ -6,6 +6,7 @@ import { buildBm25, hasBm25 } from "./bm25.js";
 import { loadChunks, listFiles, getFileLines } from "./store.js";
 import { logger } from "./logger.js";
 import { verifyCitations, type VerifiedCitation } from "./verify.js";
+import {isNotFoundAnswer, stripCitations} from "./refusal.js";
 
 const MODEL = process.env.LLM_MODEL ?? "claude-haiku-5-5";
 const MAX_STEPS = Number(process.env.MAX_AGENT_STEPS ?? 6);
@@ -166,7 +167,7 @@ export async function ask(
   repoId: string,
   question: string,
   hooks: AgentHooks = {}
-): Promise<{ answer: string; stats: AgentStats; citations: VerifiedCitation[] }> {
+): Promise<{ answer: string; stats: AgentStats; citations: VerifiedCitation[], refusalCitationsStripped: number }> {
   const q = question.trim();
   if (!q) throw new Error("Question is empty.");
   if (q.length > MAX_QUESTION_CHARS) throw new Error(`Question is too long (max ${MAX_QUESTION_CHARS} characters).`);
@@ -206,12 +207,20 @@ export async function ask(
     stats.cacheReadTokens += response.usage.cache_read_input_tokens ?? 0;
     stats.cacheCreationTokens += response.usage.cache_creation_input_tokens ?? 0;
 
-    if (response.stop_reason !== "tool_use") {
-      const answer = response.content
+        if (response.stop_reason !== "tool_use") {
+      const rawAnswer = response.content
         .filter((b): b is Anthropic.TextBlock => b.type === "text")
         .map((b) => b.text)
         .join("\n");
-      const citations = await verifyCitations(repoId, answer);
+
+      // A "Not found" answer must not cite anything. The prompt asks for that, and the code enforces it.
+      // We count what the model cited anyway, so the eval can show how often the prompt alone failed.
+      const refused = isNotFoundAnswer(rawAnswer);
+      const verified = await verifyCitations(repoId, rawAnswer);
+      const answer = refused ? stripCitations(rawAnswer) : rawAnswer;
+      const citations = refused ? [] : verified;
+      const refusalCitationsStripped = refused ? verified.length : 0;
+
       stats.latencyMs = Date.now() - started;
       logger.info(
         {
@@ -220,10 +229,11 @@ export async function ask(
           ...stats,
           citations: citations.length,
           invalidCitations: citations.filter((c) => !c.valid).length,
+          refusalCitationsStripped,
         },
         "question answered"
       );
-      return { answer, stats, citations };
+      return { answer, stats, citations, refusalCitationsStripped };
     }
 
     hooks.onReset?.();
@@ -250,5 +260,5 @@ export async function ask(
 
   stats.latencyMs = Date.now() - started;
   logger.warn({ repoId, ...stats }, "step limit reached");
-  return { answer: "I could not reach an answer within the step limit. Try a more specific question.", stats, citations: [] };
+    return { answer: "I could not reach an answer within the step limit. Try a more specific question.", stats, citations: [], refusalCitationsStripped: 0 };
 }

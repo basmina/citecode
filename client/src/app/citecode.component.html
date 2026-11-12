@@ -77,7 +77,7 @@
                 @if (m.status) {
                   <div class="status"><span class="dot"></span><span>{{ m.status }}</span></div>
                 }
-                @for (s of segments(m.text); track $index) {
+                @for (s of visibleSegments(m); track $index) {
                   @if (s.kind === 'cite') {
                     <button type="button" class="cite" [class.bad]="isUnverified(m, s)"
                             [title]="isUnverified(m, s) ? 'Could not verify these lines in the repo' : 'View ' + s.value"

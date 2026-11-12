@@ -74,6 +74,7 @@ interface AnswerResult {
   notFound: boolean;
   citations: number;
   invalidCitations: number;
+  strippedCitations: number;
   citesExpectedFile: boolean | null;
   steps: number;
   tokens: number;
@@ -88,7 +89,7 @@ if (withLlm) {
   console.log("\nRunning answer checks with the LLM (this makes real API calls)...");
   for (const item of set.questions) {
     try {
-      const { answer, stats, citations: cites } = await ask(repoId, item.q);
+      const { answer, stats, citations: cites, refusalCitationsStripped } = await ask(repoId, item.q);
       const notFound = /^\s*not found in this repo/i.test(answer);
       const badCites = cites.filter((c) => !c.valid).map((c) => `${c.path}:${c.start}-${c.end}`);
       const invalid = badCites.length;
@@ -108,6 +109,7 @@ if (withLlm) {
         notFound,
         citations: cites.length,
         invalidCitations: invalid,
+        strippedCitations: refusalCitationsStripped,
         citesExpectedFile,
         steps: stats.steps,
         tokens: totalIn + stats.outputTokens,
@@ -124,6 +126,7 @@ if (withLlm) {
         notFound: false,
         citations: 0,
         invalidCitations: 0,
+        strippedCitations: 0,
         citesExpectedFile: null,
         steps: 0,
         tokens: 0,
@@ -147,6 +150,7 @@ if (withLlm) {
   console.log(`Answerable passed:      ${positives.filter((a) => a.pass).length}/${positives.length}`);
   console.log(`Unanswerable refused:   ${negatives.filter((a) => a.pass).length}/${negatives.length}`);
   console.log(`Valid citations:        ${totalCites - invalidTotal}/${totalCites}`);
+  console.log(`Refusals where the model cited anyway (removed by server): ${negatives.filter((a) => a.strippedCitations > 0).length}/${negatives.length}`);
   console.log(`Avg tokens/question:    ${avg((a) => a.tokens)}   (input + cache + output; compare with the ~14,000 baseline)`);
   console.log(`Avg billed input units: ${avg((a) => a.billedInput)}   (cache writes 1.25x, reads 0.1x)`);
   console.log(`Avg cached input:       ${avg((a) => a.cachedPct)}%`);

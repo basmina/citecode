@@ -224,6 +224,11 @@ export class CiteCodeComponent implements OnInit {
     return out;
   }
 
+  visibleSegments(m: Message): Segment[] {
+    const all = this.segments(m.text);
+    return this.isNotFound(m) ? all.filter((s) => s.kind !== 'cite') : all;
+  }
+
   shortCite(s: Segment): string {
     return `${(s.path ?? '').split('/').pop()}:${s.start}-${s.end}`;
   }
